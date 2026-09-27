@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-3.0-only
+BasedOnStyle: Google
+ColumnLimit: 90
+IndentWidth: 4
+AccessModifierOffset: -4
+PointerAlignment: Left
+DerivePointerAlignment: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  # Own header of a .cpp file is always first (IncludeIsMainRegex default).
+  # PipeWire / SPA / sdbus-c++ / systemd
+  - Regex: '^<(pipewire|spa|sdbus-c\+\+|systemd)/'
+    Priority: 2
+  # HeadsetControl
+  - Regex: '^<headsetcontrol'
+    Priority: 2
+  # Qt / KDE Frameworks
+  - Regex: '^<(Q|K)[A-Za-z]+>$'
+    Priority: 3
+  # C / C++ standard library
+  - Regex: '^<.*>$'
+    Priority: 4
+  # Project headers
+  - Regex: '^".*"$'
+    Priority: 5

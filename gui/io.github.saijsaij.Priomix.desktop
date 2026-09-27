@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=priomix
+GenericName=Audio device priorities
+Comment=Prioritize audio outputs and microphones, ChatMix for headsets
+Exec=priomix-gui
+Icon=audio-card
+Terminal=false
+Categories=AudioVideo;Audio;Settings;Qt;KDE;
+Keywords=audio;pipewire;headset;chatmix;microphone;priority;

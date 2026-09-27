@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-3.0-only
+[Unit]
+Description=priomix audio device priority daemon
+Documentation=https://github.com/saijsaij/priomix
+# Needs a running PipeWire + WirePlumber session.
+Requires=pipewire.service
+After=pipewire.service wireplumber.service
+PartOf=pipewire.service
+
+[Service]
+Type=dbus
+BusName=io.github.saijsaij.Priomix
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/priomix-daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

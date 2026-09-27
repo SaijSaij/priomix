@@ -1,0 +1,156 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Single source of truth for the priomix D-Bus API.
+    - priomix-daemon generates its adaptor from this file (sdbus-c++-xml2cpp).
+    - priomix-gui generates its proxy from this file (qdbusxml2cpp).
+
+  Bus:          session
+  Service name: io.github.saijsaij.Priomix
+  Object path:  /io/github/saijsaij/Priomix
+
+  Device keys: every device is addressed by an opaque key string. Normally this is the
+  stable device ID (e.g. "usb:1038:12ad", "bt:AA:BB:CC:DD:EE:FF", "alsa:output.pci-..."),
+  only for two identical devices connected at the same time it becomes "<id>@<bus-path>".
+  Clients must treat keys as opaque.
+
+  Device list struct a(ssbb): key, display name, available, ignored.
+  "available" means: currently present in PipeWire and - for supported wireless
+  headsets - actually switched on.
+
+  Volumes and the ChatMix balance are percentages 0..100. Volumes use the same cubic
+  scale as Plasma/pavucontrol. Balance: 50 = center, 100 = full game, 0 = full chat.
+-->
+<node>
+  <interface name="io.github.saijsaij.Priomix">
+
+    <!-- Devices -->
+    <method name="ListSinks">
+      <arg name="devices" type="a(ssbb)" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="DeviceInfoList"/>
+    </method>
+    <method name="ListSources">
+      <arg name="devices" type="a(ssbb)" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="DeviceInfoList"/>
+    </method>
+    <method name="SetSinkIgnored">
+      <arg name="key" type="s" direction="in"/>
+      <arg name="ignored" type="b" direction="in"/>
+    </method>
+    <method name="SetSourceIgnored">
+      <arg name="key" type="s" direction="in"/>
+      <arg name="ignored" type="b" direction="in"/>
+    </method>
+
+    <!-- Priority lists -->
+    <method name="GetGameSinkPriority">
+      <arg name="keys" type="as" direction="out"/>
+    </method>
+    <method name="SetGameSinkPriority">
+      <arg name="keys" type="as" direction="in"/>
+    </method>
+    <method name="GetChatSinkPriority">
+      <arg name="keys" type="as" direction="out"/>
+    </method>
+    <!-- Rejected with io.github.saijsaij.Priomix.Error.SyncEnabled while lists are synced. -->
+    <method name="SetChatSinkPriority">
+      <arg name="keys" type="as" direction="in"/>
+    </method>
+    <method name="GetSourcePriority">
+      <arg name="keys" type="as" direction="out"/>
+    </method>
+    <method name="SetSourcePriority">
+      <arg name="keys" type="as" direction="in"/>
+    </method>
+    <method name="GetSyncPriorityLists">
+      <arg name="enabled" type="b" direction="out"/>
+    </method>
+    <method name="SetSyncPriorityLists">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+
+    <!-- Currently active devices (key, empty if none) -->
+    <method name="GetActiveGameDevice">
+      <arg name="key" type="s" direction="out"/>
+    </method>
+    <method name="GetActiveChatDevice">
+      <arg name="key" type="s" direction="out"/>
+    </method>
+    <method name="GetActiveSource">
+      <arg name="key" type="s" direction="out"/>
+    </method>
+
+    <!-- Headset polling -->
+    <method name="GetPollIntervals">
+      <arg name="ac_ms" type="u" direction="out"/>
+      <arg name="battery_ms" type="u" direction="out"/>
+    </method>
+    <method name="SetPollIntervals">
+      <arg name="ac_ms" type="u" direction="in"/>
+      <arg name="battery_ms" type="u" direction="in"/>
+    </method>
+    <method name="TriggerReevaluation"/>
+
+    <!-- ChatMix, level 1: normal volume of the virtual sinks -->
+    <method name="GetGameVolume">
+      <arg name="volume" type="u" direction="out"/>
+    </method>
+    <method name="SetGameVolume">
+      <arg name="volume" type="u" direction="in"/>
+    </method>
+    <method name="GetChatVolume">
+      <arg name="volume" type="u" direction="out"/>
+    </method>
+    <method name="SetChatVolume">
+      <arg name="volume" type="u" direction="in"/>
+    </method>
+
+    <!-- ChatMix, level 2: balance. Setters are rejected with
+         io.github.saijsaij.Priomix.Error.HardwareChatMix while a hardware wheel is active. -->
+    <method name="GetChatMixBalance">
+      <arg name="balance" type="u" direction="out"/>
+    </method>
+    <method name="SetChatMixBalance">
+      <arg name="balance" type="u" direction="in"/>
+    </method>
+    <method name="AdjustChatMixBalance">
+      <arg name="delta" type="i" direction="in"/>
+    </method>
+    <method name="GetHardwareChatMixActive">
+      <arg name="active" type="b" direction="out"/>
+    </method>
+
+    <!-- Signals -->
+    <signal name="SinksChanged"/>
+    <signal name="SourcesChanged"/>
+    <signal name="GameSinkPriorityChanged"/>
+    <signal name="ChatSinkPriorityChanged"/>
+    <signal name="SourcePriorityChanged"/>
+    <signal name="SyncPriorityListsChanged">
+      <arg name="enabled" type="b"/>
+    </signal>
+    <signal name="ActiveGameDeviceChanged">
+      <arg name="key" type="s"/>
+    </signal>
+    <signal name="ActiveChatDeviceChanged">
+      <arg name="key" type="s"/>
+    </signal>
+    <signal name="ActiveSourceChanged">
+      <arg name="key" type="s"/>
+    </signal>
+    <signal name="GameVolumeChanged">
+      <arg name="volume" type="u"/>
+    </signal>
+    <signal name="ChatVolumeChanged">
+      <arg name="volume" type="u"/>
+    </signal>
+    <signal name="ChatMixBalanceChanged">
+      <arg name="balance" type="u"/>
+    </signal>
+    <signal name="HardwareChatMixActiveChanged">
+      <arg name="active" type="b"/>
+    </signal>
+  </interface>
+</node>
