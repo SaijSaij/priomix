@@ -43,9 +43,16 @@ uint32_t LinearToPercent(float linear) {
     return static_cast<uint32_t>(std::lround(std::cbrt(linear) * 100.0f));
 }
 
-ChatMixEngine::ChatMixEngine(PipeWireRegistry& registry,
+ChatMixEngine::ChatMixEngine(sd_event* event, PipeWireRegistry& registry,
                              VolumeCallback external_volume_change)
-    : registry_(registry), external_volume_change_(std::move(external_volume_change)) {}
+    : registry_(registry),
+      external_volume_change_(std::move(external_volume_change)),
+      recheck_timer_(event, [this] {
+          for (Role* role : {&game_, &chat_}) {
+              CheckVolume(*role, role->sink_node, true);
+              CheckVolume(*role, role->output_node, true);
+          }
+      }) {}
 
 ChatMixEngine::~ChatMixEngine() {
     Unload();
@@ -79,6 +86,9 @@ pw_impl_module* ChatMixEngine::LoadRole(ChatMixRole role,
         label +
         "\""
         "   media.class = \"Audio/Sink\""
+        // WirePlumber's node/state-stream.lua also restores virtual Audio/* nodes
+        // without device routes; the daemon owns this volume (config.json).
+        "   state.restore-props = false"
         " }"
         " playback.props = {"
         "   node.name = \"" +
@@ -161,49 +171,77 @@ void ChatMixEngine::Apply(Role& role) {
                               RoleName(role.role), role.target.c_str());
         }
     }
-    if (role.sink_node != 0 && role.applied_volume != role.volume) {
+    // Volumes are only written once the node has reported its Props, i.e. is fully set
+    // up; the first report then triggers the initial write (see CheckVolume()).
+    if (HasReportedVolume(role.sink_node) && role.applied_volume != role.volume) {
         if (registry_.SetNodeVolume(role.sink_node, PercentToLinear(role.volume))) {
             role.applied_volume = role.volume;
             role.last_volume_set_ms = NowMs();
+            PRIOMIX_LOG_DEBUG("Set %s volume to %u%%", RoleName(role.role), role.volume);
         }
     }
     // Without a target WirePlumber only stops relinking but keeps an existing link (see
     // "waiting for defined target" in find-defined-target.lua), so audio would continue
     // to reach e.g. a device that was just ignored. Silence the stream instead.
     uint32_t dampening = role.target == "-1" ? 0 : role.dampening;
-    if (role.output_node != 0 && role.applied_dampening != dampening) {
+    if (HasReportedVolume(role.output_node) && role.applied_dampening != dampening) {
         if (registry_.SetNodeVolume(role.output_node, PercentToLinear(dampening))) {
             role.applied_dampening = dampening;
             role.last_dampening_set_ms = NowMs();
+            PRIOMIX_LOG_DEBUG("Set %s dampening to %u%%", RoleName(role.role), dampening);
         }
     }
 }
 
+bool ChatMixEngine::HasReportedVolume(uint32_t node_id) const {
+    const PwNode* node = node_id != 0 ? registry_.FindNode(node_id) : nullptr;
+    return node != nullptr && !node->channel_volumes.empty();
+}
+
 void ChatMixEngine::OnVolumeChanged(uint32_t node_id) {
-    const PwNode* node = registry_.FindNode(node_id);
+    for (Role* role : {&game_, &chat_}) {
+        if (node_id == role->sink_node || node_id == role->output_node) {
+            CheckVolume(*role, node_id, false);
+            return;
+        }
+    }
+}
+
+void ChatMixEngine::CheckVolume(Role& role, uint32_t node_id, bool settled) {
+    const PwNode* node = node_id != 0 ? registry_.FindNode(node_id) : nullptr;
     if (node == nullptr || node->channel_volumes.empty()) return;
     float loudest =
         *std::max_element(node->channel_volumes.begin(), node->channel_volumes.end());
     uint32_t percent = LinearToPercent(loudest);
+    bool is_sink = node_id == role.sink_node;
 
-    for (Role* role : {&game_, &chat_}) {
-        if (node_id == role->sink_node) {
-            if (percent == role->volume) return;
-            if (NowMs() - role->last_volume_set_ms < kEchoWindowMs) return;
-            // Level 1 changed from outside (tray, media keys, pavucontrol): adopt it.
-            role->volume = percent;
-            role->applied_volume = percent;
-            if (external_volume_change_) external_volume_change_(role->role, percent);
-            return;
-        }
-        if (node_id == role->output_node) {
-            if (role->applied_dampening && percent == *role->applied_dampening) return;
-            if (NowMs() - role->last_dampening_set_ms < kEchoWindowMs) return;
-            // Level 2 belongs to the wheel/hotkeys only: enforce our value.
-            role->applied_dampening.reset();
-            Apply(*role);
-            return;
-        }
+    std::optional<uint32_t> expected =
+        is_sink ? role.applied_volume : role.applied_dampening;
+    if (!expected) {
+        // First report of a new node: nothing of ours to compare with yet, write our value.
+        Apply(role);
+        return;
+    }
+    if (expected == percent) return;
+    uint64_t last_set = is_sink ? role.last_volume_set_ms : role.last_dampening_set_ms;
+    PRIOMIX_LOG_DEBUG("%s %s reported %u%% (expected %d%%)", RoleName(role.role),
+                      is_sink ? "volume" : "dampening", percent,
+                      expected ? static_cast<int>(*expected) : -1);
+    if (!settled && NowMs() - last_set < kEchoWindowMs) {
+        // Possibly a stale echo of an earlier write; decide once the window is over.
+        recheck_timer_.StartIfIdle(kEchoWindowMs);
+        return;
+    }
+
+    if (is_sink) {
+        // Level 1 changed from outside (tray, media keys, pavucontrol): adopt it.
+        role.volume = percent;
+        role.applied_volume = percent;
+        if (external_volume_change_) external_volume_change_(role.role, percent);
+    } else {
+        // Level 2 belongs to the wheel/hotkeys only: enforce our value.
+        role.applied_dampening.reset();
+        Apply(role);
     }
 }
 

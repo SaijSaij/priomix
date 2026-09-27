@@ -95,7 +95,7 @@ bool Daemon::Start() {
     if (!registry_->Connect(event_)) return false;
 
     chatmix_ = std::make_unique<ChatMixEngine>(
-        *registry_,
+        event_, *registry_,
         [this](ChatMixRole role, uint32_t v) { OnExternalVolumeChange(role, v); });
     chatmix_->SetVolume(ChatMixRole::Game, config_.game_volume);
     chatmix_->SetVolume(ChatMixRole::Chat, config_.chat_volume);

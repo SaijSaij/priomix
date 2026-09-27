@@ -30,6 +30,20 @@ cmake --build build
 ctest --test-dir build
 ```
 
+### Tests
+
+- `ctest --test-dir build -L unit` – pure logic (priority engine, device IDs, config).
+- `ctest --test-dir build -L integration` – the real audio path. Every test starts its
+  own private D-Bus, PipeWire and WirePlumber (profile `policy`, i.e. without ALSA,
+  Bluetooth or camera monitors) plus `priomix-daemon` in `/tmp/priomix-XXXXXX`, so the
+  desktop session and real hardware are never touched. Devices are null sinks/sources
+  plugged in and out by the test; a sine tone is played into `priomix-game` /
+  `priomix-chat` and the level arriving at the devices is measured. This covers routing,
+  hotplug fallback, the cubic volume scale, ChatMix dampening, ignoring, external volume
+  changes, the default microphone and persistence across daemon restarts. Tests are
+  skipped if `pipewire`, `wireplumber` or `dbus-daemon` are missing.
+  `PRIOMIX_KEEP_TEST_DIR=1` keeps the session directory with all logs.
+
 `PRIOMIX_HEADSETCONTROL` selects the HeadsetControl library: `AUTO` (default) uses the
 system library if it actually links and otherwise builds HeadsetControl 4.0.0 from source
 via CMake FetchContent. Arch's `headsetcontrol` package currently ships a static library
@@ -37,7 +51,8 @@ made of stripped slim-LTO objects (no code at all), so `AUTO` falls back to the 
 build there. The `headsetcontrol` package is still useful for its udev rules, which give
 your user access to the headset's HID interface.
 
-Options: `PRIOMIX_BUILD_GUI`, `PRIOMIX_BUILD_TESTS`, `PRIOMIX_BUILD_DAEMON` (all `ON`).
+Options: `PRIOMIX_BUILD_GUI`, `PRIOMIX_BUILD_TESTS`, `PRIOMIX_BUILD_INTEGRATION_TESTS`,
+`PRIOMIX_BUILD_DAEMON` (all `ON`).
 
 ## Installing and running
 
@@ -74,6 +89,9 @@ apps ──► priomix-game (Audio/Sink)           level 1: normal volume
   them to the default sink (which would be `priomix-game` itself). While no device is
   available their dampening is set to 0, because WirePlumber keeps an existing link in that
   case.
+- Both virtual sinks set `state.restore-props = false`: WirePlumber's stream state
+  restore also applies to virtual `Audio/*` nodes and would otherwise overwrite the
+  volumes priomix keeps in its own config.
 - The microphone is switched through `default.configured.audio.source`.
 - Everything runs single threaded on one `sd-event` loop: PipeWire's loop fd, the session
   bus (own service), the system bus (UPower) and all timers.

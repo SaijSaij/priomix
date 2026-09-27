@@ -45,7 +45,9 @@ build() {
 }
 
 check() {
-  ctest --test-dir build --output-on-failure
+  # Integration tests start their own PipeWire session, which a build chroot may not
+  # allow; they are run during development with `ctest -L integration`.
+  ctest --test-dir build --output-on-failure -LE integration
 }
 
 package() {

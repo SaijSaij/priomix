@@ -17,10 +17,14 @@
 // node.dont-fallback + node.linger, so while no target is set ("-1") WirePlumber waits
 // instead of linking it to the default sink (= our own game sink).
 
+#include <systemd/sd-event.h>
+
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
+
+#include "event_timer.hpp"
 
 struct pw_impl_module;
 
@@ -36,7 +40,8 @@ class ChatMixEngine {
 public:
     using VolumeCallback = std::function<void(ChatMixRole role, uint32_t volume)>;
 
-    ChatMixEngine(PipeWireRegistry& registry, VolumeCallback external_volume_change);
+    ChatMixEngine(sd_event* event, PipeWireRegistry& registry,
+                  VolumeCallback external_volume_change);
     ~ChatMixEngine();
 
     ChatMixEngine(const ChatMixEngine&) = delete;
@@ -86,8 +91,15 @@ private:
     pw_impl_module* LoadRole(ChatMixRole role, std::optional<uint64_t> target);
     void Apply(Role& role);
 
+    // Compares one node's reported volume with ours. `settled` = outside the echo window.
+    void CheckVolume(Role& role, uint32_t node_id, bool settled);
+    bool HasReportedVolume(uint32_t node_id) const;
+
     PipeWireRegistry& registry_;
     VolumeCallback external_volume_change_;
+    // Re-checks reports that were skipped as possible echoes once the window is over, so
+    // a real external change right after one of our own writes is not lost.
+    EventTimer recheck_timer_;
     Role game_{ChatMixRole::Game};
     Role chat_{ChatMixRole::Chat};
 };
